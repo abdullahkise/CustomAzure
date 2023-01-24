@@ -1,0 +1,133 @@
+---> Senaryo 1: HTTP'den binary data diske alınır. PQ ile düzenlenir ve Azure SQL'e basılır.
+1-Copy Activity ile webden (HTTP) diske Binary kopyala
+	* https://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data
+	* "mpg","cylinders","displacement","horsepower","weight","acceleration","modelyear","origin","carname"
+2-Diskteki dosyayı Power Query ile düzenle
+	* kolonları al (mpg, cylinders, horsepower, weigh, modelyear, carname)
+	* (Orjinal kolonları posizyone göre ayırma desteklenmiyor. 0, 7, 11, 22, 33, 37, 44, 51, 55, 57)
+		* https://docs.microsoft.com/en-us/azure/data-factory/wrangling-functions
+	* Add Columns / Extract / First Char ve Range ile 
+		mpg: (First 7)
+		cylinders: 	(Start 7, number 4)
+		horsepower:	(Start 22, number 11)
+		weigh: 		(Start 33, number 4)
+		modelyear:	(Start 51, number 4)
+		carname:	(Start 57, number 100)
+	* Kolonları sağında olunda kalan boşluklara dikkat (Transform / Format /Trim)
+	* horsepower alanındaki ? olanları filtrele
+	* "19"&modelyear şeklinde yeni kolon ekle
+	* Sink olarak Ortaya çıkan tabloyu SQL'e bas.
+	* !!! PQ int tipleri 64 olarak oluşuyor. Bunlarla sqldeki tipleri aynı yap
+	
+---------------------------------------------------------------
+---> Senaryo 2: Nufus excelini data flow ile işlemek ve Azure SQL'e kaydetmek
+1-Diskteki Nufus Exceline bağlan DataSet oluştur
+	Not:Birden fazla dosya için dosya adı kısmı boş geçilir. Activity içerisinde source kısnında wildcard belirteceğiz.
+2-Debug Mode aç. Source preview etme kısmını incele
+3-DataFlow ile bağlan 
+	- Unpivot: (Unpivoted Columns Kısmını kendin Nufus diye belirt)
+	- Aggregate: min-max ve ortalama hesapla (max(Nufus)-min(Nufus) ve round(mean(Nufus)),2)
+	- Filtrele: (Il=="İstanbul" || Il=="Ankara" || Il=="İzmir" || Il=="Bursa") veya (in(["İstanbul","Ankara","İzmir"], Il))
+	- Derived Column: Şehir (concat("Türkiye,", Il))
+	- Select: Şehir, Ortalama, Değişim
+	- Sink: Azure SQL
+	
+---------------------------------------------------------------
+---> Senaryo 3:
+1-deprem excellerini diske ekle
+2-Data Flow ile iki excele için 2 dataset oluştur
+3-unpivot GroupBy (Country), UnpivotKey(Years-string), Unpivoted Column (Affected-Integer)
+4-Join-Full (County, Year)
+5-Select(country, year, affected, killed)
+6-sink (Storage)
+
+---------------------------------------------------------------
+---> Senaryo 4: Storage de farklı Klasordeki csv dosyalarını okumak (Demo -MultipleFileAndFormat)
+1-Dosyaları klasorlere ayır. ForEach her klasor için çalışacak.
+2-Storage de bir dosya formatı ile ilgili metadata tut. Lookop ile onu çek
+	klasor|ayrac
+	urunler/UrunlerSemicolon|;
+	urunler/UrunlerComma|,
+3-Dataset tanımla, klasor ve dosya kısmı boş olsun. Parametre bölümünde iki parametre tanımla	. Bu parametreler DataSeti kullandığın aktivitede sorulacak. Oralara Foreach Item dan gelenleri basacağız.
+	FolderName
+	DelimiterSymbol
+3-Lookup sonrasında da ForEach koy.
+4-ForEach içerisinde Copy taski ile verileri çek SQL'e bas.
+5-ForEach Settings-Items için 
+	@activity('Lookup1').output.value
+7-Foreach içierisindeki Copy Activity Source kısmında Delimiter Dataseti seçip yukarıda tanımlanan parametrelere değer ata ve *.csv ile ayraç belirt.
+	@{item().klasor}
+	@{item().ayrac}
+	
+---------------------------------------------------------------
+---> Senaryo 5: Databricks notebook'a parametre göndermek
+1-Databricsk notebook oluştur ve widget ekle
+	dbutils.widgets.text("kinput","")
+	pDeger=getArgument("kinput")
+	#dbutils.widgets.remove("kinput")
+
+	print(f"Parametre Değeri : {pDeger}")
+2-Databriks user settings'ten access token al.
+3-DF tarafından Databricsk activity ekle (var olan cluster seçeneğiyle)
+4-Activity Setting bölümüne Databricks içerisindeki notebooku göster ve base parameter bölümünde widget ile aynı isimde parametre oluştur.
+5-Çalıştır ve monitor detaylarına git. Orada Databriks sayfasına yönlendiren link ile çıktıyı incele
+
+---------------------------------------------------------------
+---> Senaryo 6: DF-Dev'teki çalışayı ARM Template ile DF-Test tarafına aktarmak
+1-Data Lake ve DF-Dev DF-Test oluştur.
+2-DF-Dev üzerinde pipeline aç ve Copy Task ile Data Lake içerisinde dosya taşımak için ayarlar yap.
+3-Manage bölümünden Export ARM Template ile DF-Dev tempateini al.
+4-DF-Test üzerindeki Manage ile Import ARM template seç.
+5-Azure sayfasından Build your own tmeplate in the edtor seç ve zip içerisindeki arm_template.json upload et. sonra save et.
+
+---------------------------------------------------------------
+https://dev.azure.com/abdullahkise/
+---> Senaryo 7:
+0-Azure DevOps üzerinde Proje aç.
+1-Soldaki Organization Setting/Active Directory bölümünden Connect et.
+2-ADF-Dev Manage bölümünden Git Configuration bölümünden DevOps için bağlantı oluştur.
+3-master branch oluşur. Burada yapılan değişiklikler Publish edilebilir (Sadece master üzerinden publish edilebilir. Yeni açılan branchlerden mastera pull request gönderilebilir). 
+4-Publish edilirse adf_publish diye bir branch oluşur orada ARM Template yer alır.
+5-master branch yerine yeni bir branch açılıp geliştirme orada yapılabilir. Create Pull Request ile master branche çekme isteği oluşturulur
+6-master branch üzerinden yeniden publish edilir. Böylece adf_publish branche ARM template yansır.
+7-master içerisine bir powershell scripti koymak için DevOps'da File bölümüne geç. 
+	https://docs.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-sample-script
+8-DevOps üzerinde pipelines/releases bölümüne geç. Yeni relases pipline oluştur. 
+9-Stage UAT (User Exceptence Test) olsun.
+10-Artifact kısmına branchleri (code kaynağı anlamı oluyor) ekle, adf_publish ve mater için iki tane.
+11-UAT Stageinein altındaki linkten job altına + ile task ekle. 2 Azure PowerShell 1 ARM Deployment (Stop Trigger Power Shell, ARM Deployment,Start Trigger$false yerine $true ile)
+	-armTemplate "$(System.DefaultWorkingDirectory)/_adf_publish_source/kdf-dev/ARMTemplateForFactory.json" -ResourceGroupName "krg" -DataFactoryName "kdf-test" -predeployment $true -deleteDeployment $false
+12-ARM Template Deploy taski için ARMTEmplateForFactory.json ve parametre için de ARMTemplateParametersForFactory.json gösterelim. Parametre değerlerini override girelim.
+13-Release pipeline artifactlerine trigger ekle. Kendi repositorylerini takip etsinler.
+
+---------------------
+--CI-CD
+
+https://www.youtube.com/watch?v=cLf3nAiGG3Q
+https://sqlplayer.net/2019/06/deployment-of-azure-data-factory-with-azure-devops/
+---------
+https://sqlplayer.net/azure-data-factory/
+https://youtu.be/F8kF9h86_XE?list=PLcW0jJygu-2dgBMbtYXCOC2Dx-1KLINEe
+https://youtu.be/ZzvwaP5JOE4
+---------
+https://www.powershellgallery.com/packages/azure.datafactory.tools/0.95.0
+https://github.com/SQLPlayer/azure.datafactory.tools/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,8 @@
+14.0
+6
+1       SQLCHAR             0       100     ","      1     Product                SQL_Latin1_General_CP1_CI_AS
+2       SQLCHAR             0       100     ","      2     Store                  SQL_Latin1_General_CP1_CI_AS
+3       SQLCHAR             0       11      ","      3     SalesDate              ""
+4       SQLCHAR             0       12      ","      4     Quantity               ""
+5       SQLCHAR             0       30      ","      5     Amount                 ""
+6       SQLCHAR             0       16      "\r\n"   6     timestamp              ""

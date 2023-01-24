@@ -1,0 +1,14 @@
+https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10
+
+
+Nasıl Kullanılır?
+If you'd rather use a SAS token to authorize access to blob data, then you can append that token to the resource URL in each AzCopy command. For example: 
+'https://<storage-account-name>.blob.core.windows.net/<container-name><SAS-token>'
+
+
+--------------------
+azcopy copy "C:\Data\*\*.csv" "https://ksysdepo.blob.core.windows.net/ksysdepocon/Orders?sv=<SAS>" --recursive=True
+--------------------
+
+
+azcopy copy "C:\Data\*\*.*" "https://ksysdepo.blob.core.windows.net/ksysdepocon/DevStoreCT?sv=2020-02-10&st=2022-12-15T15%3A16%3A14Z&se=2022-12-16T15%3A16%3A14Z&sr=d&sp=racwdlmeop&sig=IotiaALpC9cTZ7WK5yPqXdB4N5WvhIefeLYJ%2BdSrRHQ%3D&sdd=1" --recursive=True --overwrite=true
